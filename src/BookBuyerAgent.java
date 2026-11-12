@@ -147,14 +147,18 @@ public class BookBuyerAgent extends Agent {
 						}
 					} else {
 						long remainingTime = replyDeadline - System.currentTimeMillis();
+
 						if (remainingTime > 0) {
 							block(remainingTime);
 						} else {
-							System.out.println(getAID().getLocalName() + ": proposal deadline reached. Received "
-									+ repliesCnt + " of " + sellerAgents.length
-									+ " replies.");
+							System.out.println(
+									getAID().getLocalName()
+											+ ": proposal deadline reached. Received "
+											+ repliesCnt + " of "
+											+ sellerAgents.length + " replies.");
+
+							step = 2;
 						}
-						step = 2; // proceed to the next step even if not all replies have been received
 					}
 					break;
 				case 2:
