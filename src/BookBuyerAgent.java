@@ -9,6 +9,7 @@ import jade.domain.DFService;
 import jade.domain.FIPAException;
 import jade.domain.FIPAAgentManagement.DFAgentDescription;
 import jade.domain.FIPAAgentManagement.ServiceDescription;
+import java.util.Date;
 
 public class BookBuyerAgent extends Agent {
 	private BookBuyerGui myGui;
@@ -86,6 +87,7 @@ public class BookBuyerAgent extends Agent {
 		private int repliesCnt = 0;
 		private MessageTemplate mt;
 		private int step = 0;
+		private long replyDeadline;
 
 		public void action() {
 			switch (step) {
@@ -98,6 +100,8 @@ public class BookBuyerAgent extends Agent {
 					cfp.setContent(targetBookTitle);
 					cfp.setConversationId("book-trade");
 					cfp.setReplyWith("cfp" + System.currentTimeMillis()); // unique value
+					replyDeadline = System.currentTimeMillis() + 5000; // 10 seconds
+					cfp.setReplyByDate(new Date(replyDeadline));
 					myAgent.send(cfp);
 					mt = MessageTemplate.and(MessageTemplate.MatchConversationId("book-trade"),
 							MessageTemplate.MatchInReplyTo(cfp.getReplyWith()));
@@ -131,6 +135,10 @@ public class BookBuyerAgent extends Agent {
 								bestTotalPrice = totalPrice;
 								bestSeller = reply.getSender();
 							}
+						} else if (reply.getPerformative() == ACLMessage.REFUSE) {
+							System.out.println(
+									reply.getSender().getLocalName()
+											+ ": refused to make a proposal.");
 						}
 						repliesCnt++;
 						if (repliesCnt >= sellerAgents.length) {
@@ -138,7 +146,15 @@ public class BookBuyerAgent extends Agent {
 							step = 2;
 						}
 					} else {
-						block();
+						long remainingTime = replyDeadline - System.currentTimeMillis();
+						if (remainingTime > 0) {
+							block(remainingTime);
+						} else {
+							System.out.println(getAID().getLocalName() + ": proposal deadline reached. Received "
+									+ repliesCnt + " of " + sellerAgents.length
+									+ " replies.");
+						}
+						step = 2; // proceed to the next step even if not all replies have been received
 					}
 					break;
 				case 2:
@@ -185,7 +201,7 @@ public class BookBuyerAgent extends Agent {
 		public boolean done() {
 			if (step == 2 && bestSeller == null) {
 				System.out.println(
-						getAID().getLocalName() + ": no affordable offer for "
+						getAID().getLocalName() + ": no suitable offer received for "
 								+ targetBookTitle + ". Current budget = " + budget);
 			}
 			// process terminates here if purchase has failed (title not on sale) or book
