@@ -13,6 +13,7 @@ import jade.domain.FIPAAgentManagement.ServiceDescription;
 public class BookBuyerAgent extends Agent {
 	private BookBuyerGui myGui;
 	private String targetBookTitle;
+	private int budget;
 
 	// list of found sellers
 	private AID[] sellerAgents;
@@ -25,9 +26,14 @@ public class BookBuyerAgent extends Agent {
 		// time interval for buyer for sending subsequent CFP
 		// as a CLI argument
 		int interval = 20000;
+		budget = 100;
 		Object[] args = getArguments();
 		if (args != null && args.length > 0)
 			interval = Integer.parseInt(args[0].toString());
+		if (args != null && args.length > 1)
+			budget = Integer.parseInt(args[1].toString());
+		System.out.println(
+				getAID().getLocalName() + ": starting budget = " + budget);
 		addBehaviour(new TickerBehaviour(this, interval) {
 			protected void onTick() {
 				// search only if the purchase task was ordered
@@ -114,7 +120,12 @@ public class BookBuyerAgent extends Agent {
 											+ ", shipping = " + shippingCost
 											+ ", total = " + totalPrice);
 
-							if (bestSeller == null || totalPrice < bestTotalPrice) {
+							if (totalPrice > budget) {
+								System.out.println(
+										reply.getSender().getLocalName()
+												+ ": total price " + totalPrice
+												+ " is above the buyer's budget of " + budget);
+							} else if (bestSeller == null || totalPrice < bestTotalPrice) {
 								bestBookPrice = bookPrice;
 								bestShippingCost = shippingCost;
 								bestTotalPrice = totalPrice;
@@ -147,9 +158,9 @@ public class BookBuyerAgent extends Agent {
 					reply = myAgent.receive(mt);
 					if (reply != null) {
 						if (reply.getPerformative() == ACLMessage.INFORM) {
-							// purchase succeeded
-							// System.out.println(getAID().getLocalName() + ": " + targetBookTitle + "
-							// purchased for " + bestPrice + " from " + reply.getSender().getLocalName());
+							budget = budget - bestTotalPrice;
+							System.out.println(
+									getAID().getLocalName() + ": remaining budget = " + budget);
 							System.out.println(
 									getAID().getLocalName() + ": " + targetBookTitle
 											+ " purchased from " + reply.getSender().getLocalName()
@@ -173,7 +184,9 @@ public class BookBuyerAgent extends Agent {
 
 		public boolean done() {
 			if (step == 2 && bestSeller == null) {
-				System.out.println(getAID().getLocalName() + ": " + targetBookTitle + " is not on sale.");
+				System.out.println(
+						getAID().getLocalName() + ": no affordable offer for "
+								+ targetBookTitle + ". Current budget = " + budget);
 			}
 			// process terminates here if purchase has failed (title not on sale) or book
 			// was successfully bought
