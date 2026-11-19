@@ -10,6 +10,7 @@ import jade.domain.FIPAException;
 import jade.domain.FIPAAgentManagement.DFAgentDescription;
 import jade.domain.FIPAAgentManagement.ServiceDescription;
 import java.util.Date;
+import java.util.Vector;
 
 public class BookBuyerAgent extends Agent {
 	private BookBuyerGui myGui;
@@ -79,6 +80,7 @@ public class BookBuyerAgent extends Agent {
 	}
 
 	private class RequestPerformer extends Behaviour {
+		private long replyDeadLine;
 		private AID bestSeller;
 		// private int bestPrice;
 		private int bestBookPrice;
@@ -88,6 +90,9 @@ public class BookBuyerAgent extends Agent {
 		private MessageTemplate mt;
 		private int step = 0;
 		private long replyDeadline;
+
+		private Vector<ACLMessage> proposals = new Vector<ACLMessage>();
+		private ACLMessage bestProposal;
 
 		public void action() {
 			switch (step) {
@@ -100,7 +105,7 @@ public class BookBuyerAgent extends Agent {
 					cfp.setContent(targetBookTitle);
 					cfp.setConversationId("book-trade");
 					cfp.setReplyWith("cfp" + System.currentTimeMillis()); // unique value
-					replyDeadline = System.currentTimeMillis() + 5000; // 10 seconds
+					replyDeadline = System.currentTimeMillis() + 5000; // 5 seconds
 					cfp.setReplyByDate(new Date(replyDeadline));
 					myAgent.send(cfp);
 					mt = MessageTemplate.and(MessageTemplate.MatchConversationId("book-trade"),
@@ -112,6 +117,8 @@ public class BookBuyerAgent extends Agent {
 					ACLMessage reply = myAgent.receive(mt);
 					if (reply != null) {
 						if (reply.getPerformative() == ACLMessage.PROPOSE) {
+
+							proposals.add(reply);
 							// proposal received
 							String[] values = reply.getContent().split(",");
 							int bookPrice = Integer.parseInt(values[0]);
@@ -134,6 +141,7 @@ public class BookBuyerAgent extends Agent {
 								bestShippingCost = shippingCost;
 								bestTotalPrice = totalPrice;
 								bestSeller = reply.getSender();
+								bestProposal = reply;
 							}
 						} else if (reply.getPerformative() == ACLMessage.REFUSE) {
 							System.out.println(
@@ -163,8 +171,33 @@ public class BookBuyerAgent extends Agent {
 					break;
 				case 2:
 					// best proposal consumption - purchase
-					ACLMessage order = new ACLMessage(ACLMessage.ACCEPT_PROPOSAL);
-					order.addReceiver(bestSeller);
+
+					for (int i = 0; i < proposals.size(); i++) {
+						ACLMessage proposal = proposals.get(i);
+
+						if (proposal != bestProposal) {
+							ACLMessage rejection = proposal.createReply();
+							rejection.setPerformative(ACLMessage.REJECT_PROPOSAL);
+							rejection.setContent(targetBookTitle);
+							myAgent.send(rejection);
+						}
+					}
+
+					if (bestProposal == null) {
+						System.out.println(
+								getAID().getLocalName()
+										+ ": no suitable offer received for "
+										+ targetBookTitle
+										+ ". Current budget = "
+										+ budget);
+
+						step = 4;
+						break;
+					}
+
+					//
+					ACLMessage order = bestProposal.createReply();
+					order.setPerformative(ACLMessage.ACCEPT_PROPOSAL);
 					order.setContent(targetBookTitle);
 					order.setConversationId("book-trade");
 					order.setReplyWith("order" + System.currentTimeMillis());
@@ -203,14 +236,7 @@ public class BookBuyerAgent extends Agent {
 		}
 
 		public boolean done() {
-			if (step == 2 && bestSeller == null) {
-				System.out.println(
-						getAID().getLocalName() + ": no suitable offer received for "
-								+ targetBookTitle + ". Current budget = " + budget);
-			}
-			// process terminates here if purchase has failed (title not on sale) or book
-			// was successfully bought
-			return ((step == 2 && bestSeller == null) || step == 4);
+			return step == 4;
 		}
 	}
 
